@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
-
-	"github.com/streadway/amqp"
 
 	"github.com/jmoiron/sqlx"
 
@@ -17,10 +16,10 @@ import (
 )
 
 var (
-	DBPool             *sqlx.DB
-	logFields          log.Fields
-	Logger             *log.Logger
-	RabbitMQConnection *amqp.Connection
+	DBPool    *sqlx.DB
+	logFields log.Fields
+	Logger    *log.Logger
+	dbOnce    sync.Once
 )
 
 func init() {
@@ -32,36 +31,40 @@ func init() {
 }
 
 func setUpDb() {
-	logFields = log.Fields{
-		"package":  "config",
-		"function": "setUpDb",
-	}
-	var err error
-	dbUrl := os.Getenv("DATABASE_URL")
-	connStr := fmt.Sprintf("%v", dbUrl)
-	DBPool, err = sqlx.Open("postgres", connStr)
-	if err != nil {
-		log.WithFields(logFields).Error(err)
-	}
+	dbOnce.Do(
+		func() {
+			logFields = log.Fields{
+				"package":  "config",
+				"function": "setUpDb",
+			}
+			var err error
+			dbUrl := os.Getenv("DATABASE_URL")
+			connStr := fmt.Sprintf("%v", dbUrl)
+			DBPool, err = sqlx.Open("postgres", connStr)
+			if err != nil {
+				log.WithFields(logFields).Error(err)
+			}
 
-	DBPool.SetConnMaxLifetime(0)
-	DBPool.SetMaxIdleConns(3)
-	DBPool.SetMaxOpenConns(3)
+			DBPool.SetConnMaxLifetime(0)
+			DBPool.SetMaxIdleConns(3)
+			DBPool.SetMaxOpenConns(3)
 
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
+			ctx, stop := context.WithCancel(context.Background())
+			defer stop()
 
-	appSignal := make(chan os.Signal, 3)
-	signal.Notify(appSignal, os.Interrupt)
+			appSignal := make(chan os.Signal, 3)
+			signal.Notify(appSignal, os.Interrupt)
 
-	go func() {
-		select {
-		case <-appSignal:
-			stop()
-		}
-	}()
+			go func() {
+				select {
+				case <-appSignal:
+					stop()
+				}
+			}()
 
-	ping(ctx)
+			ping(ctx)
+		},
+	)
 }
 
 func ping(ctx context.Context) {

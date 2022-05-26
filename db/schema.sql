@@ -19,7 +19,8 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.event (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    event jsonb
+    event jsonb,
+    created_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -58,4 +59,5 @@ ALTER TABLE ONLY public.schema_migrations
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('20220524045204');
+    ('20220524045204'),
+    ('20220525065046');
